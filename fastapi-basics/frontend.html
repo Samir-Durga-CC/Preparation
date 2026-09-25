@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!--
+  Frontend <-> Backend demo.
+
+  This is a plain HTML + JavaScript page - no framework, no build step.
+  Open it directly in a browser (double-click it, or File > Open) while
+  main.py is running, and it will talk to the FastAPI server using the
+  browser's built-in fetch() function.
+
+  The point to teach here: the "frontend" (this page, running on the
+  user's machine) never touches the data directly. It sends HTTP requests
+  to the "backend" (main.py, running on a server) and only works with
+  whatever JSON the backend sends back. That separation is the whole idea
+  behind client/server architecture.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Student API - Frontend Demo</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+  h1 { font-size: 1.4rem; }
+  form { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  input { padding: 6px; flex: 1; min-width: 100px; }
+  button { padding: 6px 12px; cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+  #status { color: #a00; font-size: 0.9rem; min-height: 1.2em; }
+</style>
+</head>
+<body>
+
+<h1>Students (talking to FastAPI at http://127.0.0.1:8000)</h1>
+<p id="status"></p>
+
+<!-- CREATE: a form that POSTs a new student to the backend -->
+<form id="add-form">
+  <input id="name" placeholder="Name" required>
+  <input id="age" type="number" placeholder="Age" required>
+  <input id="grade" placeholder="Grade" required>
+  <button type="submit">Add student</button>
+</form>
+
+<!-- READ: the table below is filled in by GET /students -->
+<table>
+  <thead>
+    <tr><th>ID</th><th>Name</th><th>Age</th><th>Grade</th><th></th></tr>
+  </thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script>
+  // Change this if your FastAPI server runs on a different host/port.
+  const API_BASE = "http://127.0.0.1:8000";
+
+  const rowsEl = document.getElementById("rows");
+  const statusEl = document.getElementById("status");
+
+  function showError(message) {
+    statusEl.textContent = message;
+  }
+
+  // ---- READ: GET /students ---------------------------------------------
+  async function loadStudents() {
+    statusEl.textContent = "";
+    try {
+      const response = await fetch(`${API_BASE}/students`);
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+      const students = await response.json();
+      renderRows(students);
+    } catch (err) {
+      showError(
+        `Could not reach the API (${err.message}). ` +
+        `Is "uvicorn main:app --reload" running?`
+      );
+    }
+  }
+
+  function renderRows(students) {
+    rowsEl.innerHTML = "";
+    for (const s of students) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${s.id}</td>
+        <td>${s.name}</td>
+        <td>${s.age}</td>
+        <td>${s.grade}</td>
+        <td><button data-id="${s.id}" class="delete-btn">Delete</button></td>
+      `;
+      rowsEl.appendChild(tr);
+    }
+  }
+
+  // ---- CREATE: POST /students --------------------------------------------
+  document.getElementById("add-form").addEventListener("submit", async (event) => {
+    event.preventDefault(); // stop the browser from doing a full page reload
+
+    const newStudent = {
+      name: document.getElementById("name").value,
+      age: Number(document.getElementById("age").value),
+      grade: document.getElementById("grade").value,
+    };
+
+    try {
+      const response = await fetch(`${API_BASE}/students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newStudent),
+      });
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+      event.target.reset();
+      loadStudents(); // refresh the table with the new data
+    } catch (err) {
+      showError(`Could not add student (${err.message}).`);
+    }
+  });
+
+  // ---- DELETE: DELETE /students/{id} -------------------------------------
+  rowsEl.addEventListener("click", async (event) => {
+    if (!event.target.classList.contains("delete-btn")) return;
+    const id = event.target.dataset.id;
+
+    try {
+      const response = await fetch(`${API_BASE}/students/${id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+      loadStudents(); // refresh the table
+    } catch (err) {
+      showError(`Could not delete student (${err.message}).`);
+    }
+  });
+
+  loadStudents(); // initial load when the page opens
+</script>
+
+</body>
+</html>
